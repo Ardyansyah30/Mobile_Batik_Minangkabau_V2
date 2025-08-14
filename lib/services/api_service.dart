@@ -4,11 +4,13 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiService {
-  // Ganti dengan URL API backend Anda. Gunakan 10.0.2.2 untuk emulator.http://10.0.2.2:8000
-  static const String _baseUrl = 'http://10.79.229.212:8000/api';
+  // ✅ Perbaikan: Hapus underscore (_) untuk membuat variabel publik.
+  static const String baseUrl = 'http://10.0.2.2:8000';
+  static const String _apiUrl = '$baseUrl/api';
+
   // --- Fungsi untuk Login Pengguna ---
   static Future<http.Response> login(String email, String password) async {
-    final url = Uri.parse('$_baseUrl/login');
+    final url = Uri.parse('$_apiUrl/login');
     final response = await http.post(
       url,
       headers: {'Accept': 'application/json'},
@@ -22,7 +24,7 @@ class ApiService {
 
   // --- Fungsi untuk Registrasi Pengguna ---
   static Future<http.Response> register(String name, String email, String password) async {
-    final url = Uri.parse('$_baseUrl/register');
+    final url = Uri.parse('$_apiUrl/register');
     final response = await http.post(
       url,
       headers: {'Accept': 'application/json'},
@@ -52,14 +54,14 @@ class ApiService {
     await prefs.remove('access_token');
   }
 
-  // ✅ Fungsi untuk Mengambil Data Riwayat Batik
+  // Fungsi untuk Mengambil Data Riwayat Batik
   static Future<http.Response> getMyBatiks() async {
     final token = await getToken();
     if (token == null) {
       return http.Response(json.encode({'message': 'Unauthenticated.'}), 401);
     }
 
-    final url = Uri.parse('$_baseUrl/histories');
+    final url = Uri.parse('$_apiUrl/histories');
     final response = await http.get(
       url,
       headers: {
@@ -71,7 +73,7 @@ class ApiService {
     return response;
   }
 
-  // --- Fungsi untuk Mengunggah Batik Baru (deteksi atau kontribusi) ---
+  // Fungsi untuk Mengunggah Batik Baru
   static Future<http.Response> uploadBatik({
     required File imageFile,
     required bool isMinangkabauBatik,
@@ -84,24 +86,26 @@ class ApiService {
       return http.Response(json.encode({'message': 'Unauthenticated.'}), 401);
     }
 
-    final uri = Uri.parse('$_baseUrl/batiks/store');
+    final uri = Uri.parse('$_apiUrl/batiks/store');
     final request = http.MultipartRequest('POST', uri);
 
-    request.headers['Authorization'] = 'Bearer $token';
-    request.headers['Accept'] = 'application/json';
+    request.headers.addAll({
+      'Authorization': 'Bearer $token',
+      'Accept': 'application/json',
+    });
 
     request.files.add(await http.MultipartFile.fromPath('image', imageFile.path));
 
     request.fields['is_minangkabau_batik'] = isMinangkabauBatik.toString();
 
-    if (isMinangkabauBatik) {
-      request.fields['batik_name'] = batikName ?? '';
-      request.fields['description'] = description ?? '';
-      request.fields['origin'] = origin ?? '';
-    } else {
-      request.fields['batik_name'] = 'Bukan Batik Minangkabau';
-      request.fields['description'] = 'Gambar bukan motif batik Minangkabau.';
-      request.fields['origin'] = 'Tidak diketahui';
+    if (batikName != null) {
+      request.fields['batik_name'] = batikName;
+    }
+    if (description != null) {
+      request.fields['description'] = description;
+    }
+    if (origin != null) {
+      request.fields['origin'] = origin;
     }
 
     final streamedResponse = await request.send();
@@ -115,7 +119,7 @@ class ApiService {
       return http.Response(json.encode({'message': 'Unauthenticated.'}), 401);
     }
 
-    final url = Uri.parse('$_baseUrl/batiks/$batikId');
+    final url = Uri.parse('$_apiUrl/batiks/$batikId');
     final response = await http.delete(
       url,
       headers: {

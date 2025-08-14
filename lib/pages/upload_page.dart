@@ -1,13 +1,12 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:quickalert/quickalert.dart';
 import 'package:tflite_flutter/tflite_flutter.dart';
 import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
 import 'batik_result_page.dart';
 import 'history_page.dart';
 import 'package:batik/services/api_service.dart';
@@ -31,9 +30,8 @@ class _UploadPageState extends State<UploadPage> {
   final int _outputZeroPoint = 184;
   final double _confidenceThreshold = 0.2;
 
-  final String _backendApiUrl = 'http://10.79.229.212:8000/api';
-
   final Map<String, Map<String, String>> _batikInfo = {
+    // ... (map _batikInfo tetap sama)
     'MOTIF BATIK AKA BAJELO': {
       'origin': 'Minangkabau (Sumatera Barat)',
       'philosophy': '''Motif aka bajelo mengandung arti bahwa tanaman yang memiliki akar yang saling menjalar dan menyatu.Hal ini mencerminkan adanya keselarasan dan kerja sama antar tiga tungku sajarangan pada figur di lingkungan sosial dan masyarakat adatMinangkabau, yaitu alim ulama, cerdik pandai, dan ninik mamak.Ketiga unsur inisaling terhubung dalam satu kesatuan yang harmonis,yang menciptakan kerukunandalam nagari.''',
@@ -154,50 +152,28 @@ class _UploadPageState extends State<UploadPage> {
     String? origin,
   }) async {
     if (_selectedImage == null) return;
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('access_token');
-    if (token == null) {
-      if (mounted) {
-        _showAlert(
-          type: QuickAlertType.error,
-          title: 'Akses Ditolak',
-          text: 'Anda harus login untuk mengunggah gambar. Silakan login kembali.',
-        );
-      }
-      return;
-    }
-    final uri = Uri.parse('$_backendApiUrl/batiks/store');
-    final request = http.MultipartRequest('POST', uri);
-    request.headers['Authorization'] = 'Bearer $token';
-    request.files.add(await http.MultipartFile.fromPath('image', _selectedImage!.path));
-    request.fields['is_minangkabau_batik'] = isMinangkabauBatik.toString();
-    if (isMinangkabauBatik) {
-      request.fields['batik_name'] = batikName ?? '';
-      request.fields['description'] = description ?? '';
-      request.fields['origin'] = origin ?? '';
-    } else {
-      request.fields['batik_name'] = 'Bukan Batik Minangkabau';
-      request.fields['description'] = 'Gambar bukan motif batik Minangkabau.';
-      request.fields['origin'] = '';
-    }
+
+    // Tampilkan pop-up loading saat mulai mengunggah
     _showAlert(
       type: QuickAlertType.loading,
       title: 'Mengunggah Data',
       text: 'Mengirim gambar dan hasil prediksi ke server...',
       autoCloseDuration: null,
     );
+
     try {
-      final response = await request.send();
-      final responseBody = await response.stream.bytesToString();
+      final response = await ApiService.uploadBatik(
+        imageFile: _selectedImage!,
+        isMinangkabauBatik: isMinangkabauBatik,
+        batikName: batikName,
+        description: description,
+        origin: origin,
+      );
+
       if (mounted) {
-        Navigator.of(context).pop();
+        Navigator.of(context).pop(); // Menutup pop-up loading setelah upload
         if (response.statusCode == 201) {
-          _showAlert(
-            type: QuickAlertType.success,
-            title: 'Berhasil',
-            text: 'Gambar dan data berhasil diunggah ke server!',
-            autoCloseDuration: const Duration(seconds: 2),
-          );
+          // Navigasi ke halaman hasil dilakukan di _predictImage
         } else if (response.statusCode == 401) {
           _showAlert(
             type: QuickAlertType.error,
@@ -205,17 +181,18 @@ class _UploadPageState extends State<UploadPage> {
             text: 'Token otentikasi tidak valid atau telah kadaluarsa. Silakan login kembali.',
           );
         } else {
+          final responseBody = json.decode(response.body);
           _showAlert(
             type: QuickAlertType.error,
             title: 'Error Unggah',
-            text: 'Gagal mengunggah gambar. Status: ${response.statusCode}. Respon: $responseBody',
+            text: 'Gagal mengunggah gambar. Status: ${response.statusCode}. Respon: ${responseBody['message']}',
           );
-          print('❌ Error mengunggah: ${response.statusCode}, Body: $responseBody');
+          print('❌ Error mengunggah: ${response.statusCode}, Body: ${response.body}');
         }
       }
     } catch (e) {
       if (mounted) {
-        Navigator.of(context).pop();
+        Navigator.of(context).pop(); // Menutup pop-up loading jika terjadi error
         _showAlert(
           type: QuickAlertType.error,
           title: 'Error Koneksi',
@@ -230,15 +207,19 @@ class _UploadPageState extends State<UploadPage> {
     if (_selectedImage == null || _interpreter == null || _labels.isEmpty || _isLoading) {
       return;
     }
+
     setState(() {
       _isLoading = true;
     });
+
+    // Tampilkan pop-up loading saat mulai memprediksi
     _showAlert(
       type: QuickAlertType.loading,
       title: 'Memprediksi',
       text: 'Menganalisis gambar batik...',
       autoCloseDuration: null,
     );
+
     try {
       final List<List<List<List<int>>>> inputData = await _preprocessImageForUint8Model(_selectedImage!);
       var outputTensor = _interpreter!.getOutputTensor(0);
@@ -256,30 +237,39 @@ class _UploadPageState extends State<UploadPage> {
       final sortedPredictions = predictionMap.entries.toList()
         ..sort((a, b) => b.value.compareTo(a.value));
       final topPrediction = sortedPredictions.first;
+
+      // Menutup pop-up loading setelah prediksi selesai
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+
       if (topPrediction.value < _confidenceThreshold) {
         if (mounted) {
-          Navigator.of(context).pop();
           _showAlert(
             type: QuickAlertType.warning,
             title: 'Batik Tidak Dikenali',
             text: 'Kami tidak dapat mengidentifikasi motif batik. Mohon coba gambar lain.',
+            autoCloseDuration: const Duration(seconds: 3),
           );
-          await _sendToBackend(isMinangkabauBatik: false);
         }
+        await _sendToBackend(isMinangkabauBatik: false);
       } else {
         final double batikConfidence = topPrediction.value;
         final double cappedConfidence = batikConfidence > 1.0 ? 1.0 : batikConfidence;
         final String batikOrigin = _batikInfo[topPrediction.key]?['origin'] ?? 'Tidak diketahui';
         final String batikPhilosophy = _batikInfo[topPrediction.key]?['philosophy'] ?? 'Filosofi tidak tersedia.';
         final bool isMinangkabauBatik = _batikInfo.containsKey(topPrediction.key);
+
+        // Kirim hasil ke backend
         await _sendToBackend(
           isMinangkabauBatik: isMinangkabauBatik,
           batikName: topPrediction.key,
           origin: batikOrigin,
           description: batikPhilosophy,
         );
+
+        // Langsung navigasi ke halaman hasil tanpa pop-up notifikasi
         if (mounted) {
-          Navigator.of(context).pop();
           Navigator.push(
             context,
             MaterialPageRoute(
@@ -296,7 +286,7 @@ class _UploadPageState extends State<UploadPage> {
       }
     } catch (e) {
       if (mounted) {
-        Navigator.of(context).pop();
+        Navigator.of(context).pop(); // Menutup pop-up loading jika error
         _showAlert(
           type: QuickAlertType.error,
           title: 'Error Prediksi',

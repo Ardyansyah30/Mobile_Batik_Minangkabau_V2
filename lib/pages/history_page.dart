@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:quickalert/quickalert.dart';
 import 'package:intl/intl.dart';
 import 'detail_page.dart';
@@ -45,7 +44,6 @@ class HistoryPage extends StatefulWidget {
 }
 
 class _HistoryPageState extends State<HistoryPage> {
-  final String _backendApiUrl = 'http://10.79.229.212:8000';
   List<Batik> _batiks = [];
   bool _isLoading = true;
   String? _error;
@@ -56,35 +54,15 @@ class _HistoryPageState extends State<HistoryPage> {
     _fetchMyBatiks();
   }
 
+  // ✅ Memperbarui fungsi untuk menggunakan ApiService
   Future<void> _fetchMyBatiks() async {
     setState(() {
       _isLoading = true;
       _error = null;
     });
 
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('access_token');
-
-    if (token == null) {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-          _error = 'Anda harus login untuk melihat riwayat.';
-        });
-      }
-      return;
-    }
-
-    final url = Uri.parse('$_backendApiUrl/api/histories');
-
     try {
-      final response = await http.get(
-        url,
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Accept': 'application/json',
-        },
-      );
+      final response = await ApiService.getMyBatiks();
 
       if (response.statusCode == 200) {
         final Map<String, dynamic> responseData = json.decode(response.body);
@@ -94,6 +72,7 @@ class _HistoryPageState extends State<HistoryPage> {
           _batiks = data.map((json) => Batik.fromJson(json)).toList();
           _isLoading = false;
         });
+        print('✅ Berhasil mengambil ${data.length} data riwayat.');
       } else if (response.statusCode == 401) {
         setState(() {
           _isLoading = false;
@@ -104,14 +83,14 @@ class _HistoryPageState extends State<HistoryPage> {
           _isLoading = false;
           _error = 'Gagal mengambil data riwayat: ${response.statusCode}';
         });
-        print('Error fetching data: ${response.statusCode}, Body: ${response.body}');
+        print('❌ Error fetching data: ${response.statusCode}, Body: ${response.body}');
       }
     } catch (e) {
       setState(() {
         _isLoading = false;
         _error = 'Terjadi kesalahan koneksi: $e';
       });
-      print('Error: $e');
+      print('❌ Error koneksi: $e');
     }
   }
 
@@ -161,10 +140,11 @@ class _HistoryPageState extends State<HistoryPage> {
             _batiks.removeAt(index);
           });
         } else {
+          final responseBody = json.decode(response.body);
           _showAlert(
             type: QuickAlertType.error,
             title: 'Gagal',
-            text: 'Gagal menghapus riwayat: ${json.decode(response.body)['message']}',
+            text: 'Gagal menghapus riwayat: ${responseBody['message']}',
           );
         }
       },
@@ -185,7 +165,26 @@ class _HistoryPageState extends State<HistoryPage> {
         backgroundColor: const Color(0xFF8B4513),
         iconTheme: const IconThemeData(color: Colors.white),
       ),
-      body: _buildBody(),
+      body: Stack(
+        children: [
+          Positioned.fill(
+            child: Image.asset(
+              'assets/background1.png',
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => Container(
+                color: Colors.grey,
+                child: const Center(
+                  child: Text(
+                    'Background image not found',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          _buildBody(),
+        ],
+      ),
     );
   }
 
@@ -227,6 +226,7 @@ class _HistoryPageState extends State<HistoryPage> {
         final batik = _batiks[index];
         final formattedDate = DateFormat('dd MMMM yyyy').format(batik.createdAt);
         return Card(
+          color: Colors.white.withOpacity(0.8),
           elevation: 4,
           margin: const EdgeInsets.only(bottom: 16),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -236,11 +236,14 @@ class _HistoryPageState extends State<HistoryPage> {
               borderRadius: BorderRadius.circular(8),
               child: batik.imageUrl != null
                   ? Image.network(
-                '$_backendApiUrl${batik.imageUrl}',
+                '${ApiService.baseUrl}${batik.imageUrl}', // ✅ Menggunakan baseUrl dari ApiService
                 width: 80,
                 height: 80,
                 fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) => const Icon(Icons.broken_image, size: 80),
+                errorBuilder: (context, error, stackTrace) {
+                  print('❌ Gagal memuat gambar dari URL: ${ApiService.baseUrl}${batik.imageUrl}');
+                  return const Icon(Icons.broken_image, size: 80);
+                },
               )
                   : const Icon(Icons.image_not_supported, size: 80),
             ),
@@ -275,7 +278,7 @@ class _HistoryPageState extends State<HistoryPage> {
                 MaterialPageRoute(
                   builder: (context) => DetailPage(
                     batik: batik,
-                    backendApiUrl: _backendApiUrl,
+                    backendApiUrl: ApiService.baseUrl, // ✅ Menggunakan baseUrl dari ApiService
                   ),
                 ),
               );
