@@ -4,13 +4,13 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiService {
-  // ✅ Perbaikan: Hapus underscore (_) untuk membuat variabel publik.
+  // Base URL dari backend Laravel
   static const String baseUrl = 'http://10.0.2.2:8000';
-  static const String _apiUrl = '$baseUrl/api';
+  static const String apiUrl = '$baseUrl/api';
 
   // --- Fungsi untuk Login Pengguna ---
   static Future<http.Response> login(String email, String password) async {
-    final url = Uri.parse('$_apiUrl/login');
+    final url = Uri.parse('$apiUrl/login');
     final response = await http.post(
       url,
       headers: {'Accept': 'application/json'},
@@ -24,7 +24,7 @@ class ApiService {
 
   // --- Fungsi untuk Registrasi Pengguna ---
   static Future<http.Response> register(String name, String email, String password) async {
-    final url = Uri.parse('$_apiUrl/register');
+    final url = Uri.parse('$apiUrl/register');
     final response = await http.post(
       url,
       headers: {'Accept': 'application/json'},
@@ -54,14 +54,15 @@ class ApiService {
     await prefs.remove('access_token');
   }
 
-  // Fungsi untuk Mengambil Data Riwayat Batik
-  static Future<http.Response> getMyBatiks() async {
+  // --- Fungsi untuk Mengambil Data Riwayat Batik ---
+  // PERBAIKAN: Mengembalikan List<dynamic> langsung dari respons.
+  static Future<List<dynamic>> getMyBatiks() async {
     final token = await getToken();
     if (token == null) {
-      return http.Response(json.encode({'message': 'Unauthenticated.'}), 401);
+      throw Exception('Unauthenticated.');
     }
 
-    final url = Uri.parse('$_apiUrl/histories');
+    final url = Uri.parse('$apiUrl/histories');
     final response = await http.get(
       url,
       headers: {
@@ -70,10 +71,17 @@ class ApiService {
       },
     );
 
-    return response;
+    if (response.statusCode == 200) {
+      final body = json.decode(response.body);
+      // ✅ Perbaikan utama: Mengasumsikan respons JSON memiliki key 'batiks' yang berisi list.
+      // Cek jika null, kembalikan list kosong []
+      return body['batiks'] as List<dynamic>? ?? [];
+    } else {
+      throw Exception('Gagal memuat data riwayat batik: ${response.statusCode}');
+    }
   }
 
-  // Fungsi untuk Mengunggah Batik Baru
+  // --- Fungsi untuk Mengunggah Batik Baru ---
   static Future<http.Response> uploadBatik({
     required File imageFile,
     required bool isMinangkabauBatik,
@@ -86,7 +94,7 @@ class ApiService {
       return http.Response(json.encode({'message': 'Unauthenticated.'}), 401);
     }
 
-    final uri = Uri.parse('$_apiUrl/batiks/store');
+    final uri = Uri.parse('$apiUrl/batiks/store');
     final request = http.MultipartRequest('POST', uri);
 
     request.headers.addAll({
@@ -98,13 +106,14 @@ class ApiService {
 
     request.fields['is_minangkabau_batik'] = isMinangkabauBatik.toString();
 
-    if (batikName != null) {
+    // ✅ Perbaikan: Tambahkan pengecekan `isNotEmpty` untuk mencegah pengiriman string kosong.
+    if (batikName != null && batikName.isNotEmpty) {
       request.fields['batik_name'] = batikName;
     }
-    if (description != null) {
+    if (description != null && description.isNotEmpty) {
       request.fields['description'] = description;
     }
-    if (origin != null) {
+    if (origin != null && origin.isNotEmpty) {
       request.fields['origin'] = origin;
     }
 
@@ -119,7 +128,7 @@ class ApiService {
       return http.Response(json.encode({'message': 'Unauthenticated.'}), 401);
     }
 
-    final url = Uri.parse('$_apiUrl/batiks/$batikId');
+    final url = Uri.parse('$apiUrl/batiks/$batikId');
     final response = await http.delete(
       url,
       headers: {

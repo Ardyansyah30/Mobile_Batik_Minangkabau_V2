@@ -252,7 +252,15 @@ class _UploadPageState extends State<UploadPage> {
             autoCloseDuration: const Duration(seconds: 3),
           );
         }
-        await _sendToBackend(isMinangkabauBatik: false);
+        
+        // Perbaikan: Kirim data default yang jelas
+        await _sendToBackend(
+          isMinangkabauBatik: false,
+          batikName: 'Tidak Diketahui',
+          description: 'Gambar tidak dapat diidentifikasi sebagai motif batik Minangkabau.',
+          origin: 'Tidak diketahui'
+        );
+
       } else {
         final double batikConfidence = topPrediction.value;
         final double cappedConfidence = batikConfidence > 1.0 ? 1.0 : batikConfidence;

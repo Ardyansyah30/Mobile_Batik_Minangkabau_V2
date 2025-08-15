@@ -1,25 +1,25 @@
-// lib/detail_page.dart
-
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'history_page.dart'; // Import model Batik dari HistoryPage
 
 class DetailPage extends StatelessWidget {
   final Batik batik;
-  final String backendApiUrl;
+  // Menghapus backendApiUrl karena tidak lagi diperlukan
+  // final String backendApiUrl;
 
   const DetailPage({
     super.key,
     required this.batik,
-    required this.backendApiUrl,
+    // Menghapus parameter backendApiUrl dari konstruktor
+    // required this.backendApiUrl,
   });
 
   @override
   Widget build(BuildContext context) {
     final formattedDate = DateFormat('dd MMMM yyyy').format(batik.createdAt);
-    final imageUrl = batik.imageUrl != null
-        ? '$backendApiUrl${batik.imageUrl}'
-        : null;
+    
+    // Gunakan langsung batik.imageUrl yang sudah disesuaikan
+    final imageUrl = batik.imageUrl;
 
     return Scaffold(
       appBar: AppBar(
@@ -42,7 +42,7 @@ class DetailPage extends StatelessWidget {
               ClipRRect(
                 borderRadius: BorderRadius.circular(12),
                 child: Image.network(
-                  imageUrl,
+                  imageUrl, // BARIS INI SUDAH TEPAT
                   width: double.infinity,
                   fit: BoxFit.cover,
                   errorBuilder: (context, error, stackTrace) =>

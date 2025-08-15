@@ -25,12 +25,32 @@ class Batik {
   });
 
   factory Batik.fromJson(Map<String, dynamic> json) {
+    String? rawImageUrl = json['image_url'] as String?;
+    String? displayImageUrl = rawImageUrl;
+
+    if (rawImageUrl != null) {
+      // Periksa apakah URL sudah lengkap (dimulai dengan 'http')
+      if (!rawImageUrl.startsWith('http')) {
+        // Jika belum, gabungkan dengan base URL
+        displayImageUrl = ApiService.baseUrl + rawImageUrl;
+      }
+
+      // Kemudian, jika URL masih mengarah ke localhost, sesuaikan untuk emulator
+      if (displayImageUrl != null && displayImageUrl.startsWith('http://localhost:8000')) {
+        displayImageUrl = displayImageUrl.replaceFirst('http://localhost:8000', 'http://10.0.2.2:8000');
+      } else if (displayImageUrl != null && displayImageUrl.startsWith('http://127.0.0.1:8000')) {
+        displayImageUrl = displayImageUrl.replaceFirst('http://127.0.0.1:8000', 'http://10.0.2.2:8000');
+      }
+      // Untuk perangkat fisik, pastikan IP lokal komputer Anda sudah benar
+      // contoh: 'http://192.168.1.100:8000'
+    }
+
     return Batik(
       id: json['id'],
       batikName: json['batik_name'] ?? 'Tidak Diketahui',
       description: json['description'] ?? 'Tidak ada deskripsi.',
       origin: json['origin'] ?? 'Tidak diketahui',
-      imageUrl: json['image_url'] as String?,
+      imageUrl: displayImageUrl, // Gunakan URL yang sudah disesuaikan
       createdAt: DateTime.parse(json['created_at']),
     );
   }
@@ -54,7 +74,6 @@ class _HistoryPageState extends State<HistoryPage> {
     _fetchMyBatiks();
   }
 
-  // ✅ Memperbarui fungsi untuk menggunakan ApiService
   Future<void> _fetchMyBatiks() async {
     setState(() {
       _isLoading = true;
@@ -62,35 +81,21 @@ class _HistoryPageState extends State<HistoryPage> {
     });
 
     try {
-      final response = await ApiService.getMyBatiks();
+      final List<dynamic> batikDataList = await ApiService.getMyBatiks();
 
-      if (response.statusCode == 200) {
-        final Map<String, dynamic> responseData = json.decode(response.body);
-        final List<dynamic> data = responseData['histories'];
-
-        setState(() {
-          _batiks = data.map((json) => Batik.fromJson(json)).toList();
-          _isLoading = false;
-        });
-        print('✅ Berhasil mengambil ${data.length} data riwayat.');
-      } else if (response.statusCode == 401) {
-        setState(() {
-          _isLoading = false;
-          _error = 'Sesi Anda telah habis. Silakan login kembali.';
-        });
-      } else {
-        setState(() {
-          _isLoading = false;
-          _error = 'Gagal mengambil data riwayat: ${response.statusCode}';
-        });
-        print('❌ Error fetching data: ${response.statusCode}, Body: ${response.body}');
-      }
+      // DEBUG PRINT
+      print('✅ Berhasil mengambil ${batikDataList.length} data riwayat.');
+      
+      setState(() {
+        _batiks = batikDataList.map((json) => Batik.fromJson(json)).toList();
+        _isLoading = false;
+      });
     } catch (e) {
       setState(() {
         _isLoading = false;
-        _error = 'Terjadi kesalahan koneksi: $e';
+        _error = 'Terjadi kesalahan: ' + e.toString();
       });
-      print('❌ Error koneksi: $e');
+      print('❌ Error koneksi: ' + e.toString());
     }
   }
 
@@ -116,7 +121,6 @@ class _HistoryPageState extends State<HistoryPage> {
     );
   }
 
-  // ✅ Fungsi untuk menghapus riwayat
   Future<void> _deleteBatik(int id, int index) async {
     QuickAlert.show(
       context: context,
@@ -236,12 +240,12 @@ class _HistoryPageState extends State<HistoryPage> {
               borderRadius: BorderRadius.circular(8),
               child: batik.imageUrl != null
                   ? Image.network(
-                '${ApiService.baseUrl}${batik.imageUrl}', // ✅ Menggunakan baseUrl dari ApiService
+                batik.imageUrl!, // BARIS YANG TELAH DIPERBAIKI
                 width: 80,
                 height: 80,
                 fit: BoxFit.cover,
                 errorBuilder: (context, error, stackTrace) {
-                  print('❌ Gagal memuat gambar dari URL: ${ApiService.baseUrl}${batik.imageUrl}');
+                  print('❌ Gagal memuat gambar dari URL: ${batik.imageUrl}');
                   return const Icon(Icons.broken_image, size: 80);
                 },
               )
@@ -278,7 +282,8 @@ class _HistoryPageState extends State<HistoryPage> {
                 MaterialPageRoute(
                   builder: (context) => DetailPage(
                     batik: batik,
-                    backendApiUrl: ApiService.baseUrl, // ✅ Menggunakan baseUrl dari ApiService
+                    // HAPUS BARIS DI BAWAH INI
+                    // backendApiUrl: ApiService.baseUrl,
                   ),
                 ),
               );
