@@ -5,7 +5,6 @@ import 'package:intl/intl.dart';
 import 'detail_page.dart';
 import '../services/api_service.dart';
 
-// Model untuk merepresentasikan data Batik
 class Batik {
   final int id;
   final String batikName;
@@ -28,20 +27,15 @@ class Batik {
     String? displayImageUrl = rawImageUrl;
 
     if (rawImageUrl != null) {
-      // Periksa apakah URL sudah lengkap (dimulai dengan 'http')
       if (!rawImageUrl.startsWith('http')) {
-        // Jika belum, gabungkan dengan base URL
         displayImageUrl = ApiService.baseUrl + rawImageUrl;
       }
 
-      // Kemudian, jika URL masih mengarah ke localhost, sesuaikan untuk emulator
       if (displayImageUrl != null && displayImageUrl.startsWith('http://localhost:8000')) {
         displayImageUrl = displayImageUrl.replaceFirst('http://localhost:8000', 'http://10.0.2.2:8000');
       } else if (displayImageUrl != null && displayImageUrl.startsWith('http://127.0.0.1:8000')) {
         displayImageUrl = displayImageUrl.replaceFirst('http://127.0.0.1:8000', 'http://10.0.2.2:8000');
       }
-      // Untuk perangkat fisik, pastikan IP lokal komputer Anda sudah benar
-      // contoh: 'http://192.168.1.100:8000'
     }
 
     return Batik(
@@ -49,7 +43,7 @@ class Batik {
       batikName: json['batik_name'] ?? 'Tidak Diketahui',
       description: json['description'] ?? 'Tidak ada deskripsi.',
       origin: json['origin'] ?? 'Tidak diketahui',
-      imageUrl: displayImageUrl, // Gunakan URL yang sudah disesuaikan
+      imageUrl: displayImageUrl,
       createdAt: DateTime.parse(json['created_at']),
     );
   }
@@ -74,6 +68,7 @@ class _HistoryPageState extends State<HistoryPage> {
   }
 
   Future<void> _fetchMyBatiks() async {
+    if (!mounted) return;
     setState(() {
       _isLoading = true;
       _error = null;
@@ -82,20 +77,76 @@ class _HistoryPageState extends State<HistoryPage> {
     try {
       final List<dynamic> batikDataList = await ApiService.getMyBatiks();
 
-      // DEBUG PRINT
-      print('✅ Berhasil mengambil ${batikDataList.length} data riwayat.');
-      
-      setState(() {
-        _batiks = batikDataList.map((json) => Batik.fromJson(json)).toList();
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _batiks = batikDataList.map((json) => Batik.fromJson(json)).toList();
+          _isLoading = false;
+        });
+      }
     } catch (e) {
-      setState(() {
-        _isLoading = false;
-        _error = 'Terjadi kesalahan: $e';
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _error = 'Terjadi kesalahan: $e';
+        });
+      }
       print('❌ Error koneksi: $e');
     }
+  }
+
+  // Fungsi untuk menampilkan dialog konfirmasi dan memicu penghapusan semua riwayat
+  Future<void> _deleteAllHistory() async {
+    if (!mounted) return;
+    QuickAlert.show(
+      context: context,
+      type: QuickAlertType.confirm,
+      title: 'Hapus Semua Riwayat?',
+      text: 'Apakah Anda yakin ingin menghapus semua riwayat scan batik Anda? Tindakan ini tidak dapat dibatalkan.',
+      confirmBtnText: 'Ya',
+      cancelBtnText: 'Tidak',
+      confirmBtnColor: Colors.red,
+      onConfirmBtnTap: () async {
+        if (!mounted) return;
+        Navigator.pop(context); // Tutup dialog konfirmasi
+        QuickAlert.show(
+          context: context,
+          type: QuickAlertType.loading,
+          title: 'Menghapus',
+          text: 'Menghapus semua riwayat...',
+          autoCloseDuration: null,
+        );
+        try {
+          final response = await ApiService.deleteAllBatiks();
+          if (mounted) {
+            Navigator.of(context).pop(); // Tutup loading alert
+            if (response.statusCode == 200) {
+              _showAlert(
+                type: QuickAlertType.success,
+                title: 'Sukses',
+                text: 'Semua riwayat berhasil dihapus.',
+              );
+              _fetchMyBatiks(); // Muat ulang data
+            } else {
+              final body = json.decode(response.body);
+              _showAlert(
+                type: QuickAlertType.error,
+                title: 'Gagal',
+                text: body['message'] ?? 'Gagal menghapus riwayat. Coba lagi.',
+              );
+            }
+          }
+        } catch (e) {
+          if (mounted) {
+            Navigator.of(context).pop();
+            _showAlert(
+              type: QuickAlertType.error,
+              title: 'Error Koneksi',
+              text: 'Gagal terhubung ke server.',
+            );
+          }
+        }
+      },
+    );
   }
 
   void _showAlert({
@@ -121,6 +172,7 @@ class _HistoryPageState extends State<HistoryPage> {
   }
 
   Future<void> _deleteBatik(int id, int index) async {
+    if (!mounted) return;
     QuickAlert.show(
       context: context,
       type: QuickAlertType.confirm,
@@ -130,25 +182,28 @@ class _HistoryPageState extends State<HistoryPage> {
       cancelBtnText: 'Tidak',
       confirmBtnColor: Colors.red,
       onConfirmBtnTap: () async {
+        if (!mounted) return;
         Navigator.pop(context); // Tutup dialog konfirmasi
         final response = await ApiService.deleteBatik(id);
 
-        if (response.statusCode == 200) {
-          _showAlert(
-            type: QuickAlertType.success,
-            title: 'Berhasil',
-            text: 'Riwayat berhasil dihapus.',
-          );
-          setState(() {
-            _batiks.removeAt(index);
-          });
-        } else {
-          final responseBody = json.decode(response.body);
-          _showAlert(
-            type: QuickAlertType.error,
-            title: 'Gagal',
-            text: 'Gagal menghapus riwayat: ${responseBody['message']}',
-          );
+        if (mounted) {
+          if (response.statusCode == 200) {
+            _showAlert(
+              type: QuickAlertType.success,
+              title: 'Berhasil',
+              text: 'Riwayat berhasil dihapus.',
+            );
+            setState(() {
+              _batiks.removeAt(index);
+            });
+          } else {
+            final responseBody = json.decode(response.body);
+            _showAlert(
+              type: QuickAlertType.error,
+              title: 'Gagal',
+              text: 'Gagal menghapus riwayat: ${responseBody['message']}',
+            );
+          }
         }
       },
     );
@@ -167,6 +222,14 @@ class _HistoryPageState extends State<HistoryPage> {
         ),
         backgroundColor: const Color(0xFF8B4513),
         iconTheme: const IconThemeData(color: Colors.white),
+        actions: [
+          if (_batiks.isNotEmpty) // Tampilkan tombol hanya jika ada riwayat
+            IconButton(
+              icon: const Icon(Icons.delete_sweep, color: Colors.white),
+              onPressed: _deleteAllHistory,
+              tooltip: 'Hapus Semua Riwayat',
+            ),
+        ],
       ),
       body: Stack(
         children: [
@@ -239,7 +302,7 @@ class _HistoryPageState extends State<HistoryPage> {
               borderRadius: BorderRadius.circular(8),
               child: batik.imageUrl != null
                   ? Image.network(
-                batik.imageUrl!, // BARIS YANG TELAH DIPERBAIKI
+                batik.imageUrl!,
                 width: 80,
                 height: 80,
                 fit: BoxFit.cover,
@@ -281,8 +344,6 @@ class _HistoryPageState extends State<HistoryPage> {
                 MaterialPageRoute(
                   builder: (context) => DetailPage(
                     batik: batik,
-                    // HAPUS BARIS DI BAWAH INI
-                    // backendApiUrl: ApiService.baseUrl,
                   ),
                 ),
               );

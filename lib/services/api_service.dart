@@ -4,41 +4,9 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiService {
-  // Base URL dari backend Laravel
   static const String baseUrl = 'http://10.0.2.2:8000';
   static const String apiUrl = '$baseUrl/api';
 
-  // --- Fungsi untuk Login Pengguna ---
-  static Future<http.Response> login(String email, String password) async {
-    final url = Uri.parse('$apiUrl/login');
-    final response = await http.post(
-      url,
-      headers: {'Accept': 'application/json'},
-      body: {
-        'email': email,
-        'password': password,
-      },
-    );
-    return response;
-  }
-
-  // --- Fungsi untuk Registrasi Pengguna ---
-  static Future<http.Response> register(String name, String email, String password) async {
-    final url = Uri.parse('$apiUrl/register');
-    final response = await http.post(
-      url,
-      headers: {'Accept': 'application/json'},
-      body: {
-        'name': name,
-        'email': email,
-        'password': password,
-        'password_confirmation': password,
-      },
-    );
-    return response;
-  }
-
-  // --- Fungsi untuk Otentikasi dan Token ---
   static Future<String?> getToken() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString('access_token');
@@ -54,8 +22,34 @@ class ApiService {
     await prefs.remove('access_token');
   }
 
-  // --- Fungsi untuk Mengambil Data Riwayat Batik ---
-  // PERBAIKAN: Mengembalikan List<dynamic> langsung dari respons.
+  static Future<http.Response> login(String email, String password) async {
+    final url = Uri.parse('$apiUrl/login');
+    final response = await http.post(
+      url,
+      headers: {'Accept': 'application/json'},
+      body: {
+        'email': email,
+        'password': password,
+      },
+    );
+    return response;
+  }
+
+  static Future<http.Response> register(String name, String email, String password) async {
+    final url = Uri.parse('$apiUrl/register');
+    final response = await http.post(
+      url,
+      headers: {'Accept': 'application/json'},
+      body: {
+        'name': name,
+        'email': email,
+        'password': password,
+        'password_confirmation': password,
+      },
+    );
+    return response;
+  }
+
   static Future<List<dynamic>> getMyBatiks() async {
     final token = await getToken();
     if (token == null) {
@@ -73,15 +67,12 @@ class ApiService {
 
     if (response.statusCode == 200) {
       final body = json.decode(response.body);
-      // ✅ Perbaikan utama: Mengasumsikan respons JSON memiliki key 'batiks' yang berisi list.
-      // Cek jika null, kembalikan list kosong []
       return body['batiks'] as List<dynamic>? ?? [];
     } else {
       throw Exception('Gagal memuat data riwayat batik: ${response.statusCode}');
     }
   }
 
-  // --- Fungsi untuk Mengunggah Batik Baru ---
   static Future<http.Response> uploadBatik({
     required File imageFile,
     required bool isMinangkabauBatik,
@@ -106,7 +97,6 @@ class ApiService {
 
     request.fields['is_minangkabau_batik'] = isMinangkabauBatik.toString();
 
-    // ✅ Perbaikan: Tambahkan pengecekan `isNotEmpty` untuk mencegah pengiriman string kosong.
     if (batikName != null && batikName.isNotEmpty) {
       request.fields['batik_name'] = batikName;
     }
@@ -121,7 +111,6 @@ class ApiService {
     return await http.Response.fromStream(streamedResponse);
   }
 
-  // --- Fungsi untuk Menghapus Riwayat Batik ---
   static Future<http.Response> deleteBatik(int batikId) async {
     final token = await getToken();
     if (token == null) {
@@ -129,6 +118,25 @@ class ApiService {
     }
 
     final url = Uri.parse('$apiUrl/batiks/$batikId');
+    final response = await http.delete(
+      url,
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Accept': 'application/json',
+      },
+    );
+
+    return response;
+  }
+
+  // FUNGSI BARU: Hapus SEMUA Riwayat Batik
+  static Future<http.Response> deleteAllBatiks() async {
+    final token = await getToken();
+    if (token == null) {
+      return http.Response(json.encode({'message': 'Unauthenticated.'}), 401);
+    }
+
+    final url = Uri.parse('$apiUrl/histories/clear-all');
     final response = await http.delete(
       url,
       headers: {
