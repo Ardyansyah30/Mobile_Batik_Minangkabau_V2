@@ -6,7 +6,6 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:quickalert/quickalert.dart';
 import 'package:tflite_flutter/tflite_flutter.dart';
-import 'package:http/http.dart' as http;
 import 'batik_result_page.dart';
 import 'history_page.dart';
 import 'package:batik/services/api_service.dart';
@@ -151,9 +150,43 @@ class _UploadPageState extends State<UploadPage> {
     String? description,
     String? origin,
   }) async {
-    if (_selectedImage == null) return;
+    if (_selectedImage == null) {
+      print('❌ Tidak ada gambar yang dipilih.');
+      _showAlert(
+        type: QuickAlertType.error,
+        title: 'Gagal Mengunggah',
+        text: 'Silakan pilih gambar terlebih dahulu.',
+      );
+      return;
+    }
+    if (!await _selectedImage!.exists()) {
+      print('❌ File gambar tidak ditemukan: \\${_selectedImage!.path}');
+      _showAlert(
+        type: QuickAlertType.error,
+        title: 'File Tidak Ditemukan',
+        text: 'File gambar tidak ditemukan di perangkat.',
+      );
+      return;
+    }
 
-    // Tampilkan pop-up loading saat mulai mengunggah
+    // Sanitasi dan limitasi string
+    String safeBatikName = (batikName ?? '').trim();
+    String safeDescription = (description ?? '').trim();
+    String safeOrigin = (origin ?? '').trim();
+    if (safeBatikName.length > 100) safeBatikName = safeBatikName.substring(0, 100);
+    if (safeDescription.length > 1000) safeDescription = safeDescription.substring(0, 1000);
+    if (safeOrigin.length > 100) safeOrigin = safeOrigin.substring(0, 100);
+
+    // Debug print semua field
+    print('--- DATA YANG DIKIRIM KE BACKEND ---');
+    print('isMinangkabauBatik: \\$isMinangkabauBatik');
+    print('batikName: \\$safeBatikName');
+    print('description: \\$safeDescription');
+    print('origin: \\$safeOrigin');
+    print('file path: \\${_selectedImage!.path}');
+    print('file size: \\${await _selectedImage!.length()} bytes');
+    print('-------------------------------------');
+
     _showAlert(
       type: QuickAlertType.loading,
       title: 'Mengunggah Data',
@@ -165,9 +198,9 @@ class _UploadPageState extends State<UploadPage> {
       final response = await ApiService.uploadBatik(
         imageFile: _selectedImage!,
         isMinangkabauBatik: isMinangkabauBatik,
-        batikName: batikName,
-        description: description,
-        origin: origin,
+        batikName: safeBatikName,
+        description: safeDescription,
+        origin: safeOrigin,
       );
 
       if (mounted) {
@@ -185,9 +218,9 @@ class _UploadPageState extends State<UploadPage> {
           _showAlert(
             type: QuickAlertType.error,
             title: 'Error Unggah',
-            text: 'Gagal mengunggah gambar. Status: ${response.statusCode}. Respon: ${responseBody['message']}',
+            text: 'Gagal mengunggah gambar. Status: \\${response.statusCode}. Respon: \\${responseBody['message']}',
           );
-          print('❌ Error mengunggah: ${response.statusCode}, Body: ${response.body}');
+          print('❌ Error mengunggah: \\${response.statusCode}, Body: \\${response.body}');
         }
       }
     } catch (e) {
@@ -196,11 +229,34 @@ class _UploadPageState extends State<UploadPage> {
         _showAlert(
           type: QuickAlertType.error,
           title: 'Error Koneksi',
-          text: 'Gagal terhubung ke server: $e',
+          text: 'Gagal terhubung ke server: \\$e',
         );
       }
-      print('❌ Error koneksi: $e');
+      print('❌ Error koneksi: \\$e');
     }
+  }
+
+  // Helper: cari key paling mirip dari _batikInfo
+  String? _findClosestBatikKey(String label) {
+    String normalized(String s) => s.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+    String normLabel = normalized(label);
+
+    // Logika pencarian yang diperbaiki
+    for (final key in _batikInfo.keys) {
+      if (normalized(key) == normLabel) {
+        print('✅ Ditemukan kecocokan persis: $key');
+        return key;
+      }
+    }
+    // Fallback: cari yang mengandung kata kunci utama jika kecocokan persis gagal
+    for (final key in _batikInfo.keys) {
+      if (normalized(key).contains(normLabel) || normLabel.contains(normalized(key))) {
+        print('✅ Ditemukan kecocokan parsial: $key');
+        return key;
+      }
+    }
+    print('❌ Tidak ada kecocokan yang ditemukan untuk label: $label');
+    return null;
   }
 
   Future<void> _predictImage() async {
@@ -212,7 +268,6 @@ class _UploadPageState extends State<UploadPage> {
       _isLoading = true;
     });
 
-    // Tampilkan pop-up loading saat mulai memprediksi
     _showAlert(
       type: QuickAlertType.loading,
       title: 'Memprediksi',
@@ -238,10 +293,18 @@ class _UploadPageState extends State<UploadPage> {
         ..sort((a, b) => b.value.compareTo(a.value));
       final topPrediction = sortedPredictions.first;
 
-      // Menutup pop-up loading setelah prediksi selesai
       if (mounted) {
         Navigator.of(context).pop();
       }
+
+      String predictedName = topPrediction.key.trim();
+      print('Label mentah dari model: "${topPrediction.key}"');
+      String? matchedKey = _findClosestBatikKey(predictedName);
+      final batikInfoEntry = matchedKey != null ? _batikInfo[matchedKey] : null;
+      final bool isMinangkabauBatik = batikInfoEntry != null;
+      final String batikOrigin = batikInfoEntry?['origin'] ?? 'Tidak diketahui';
+      final String batikPhilosophy = batikInfoEntry?['philosophy'] ?? 'Filosofi tidak tersedia.';
+      final String batikNameForBackend = matchedKey ?? predictedName;
 
       if (topPrediction.value < _confidenceThreshold) {
         if (mounted) {
@@ -252,38 +315,32 @@ class _UploadPageState extends State<UploadPage> {
             autoCloseDuration: const Duration(seconds: 3),
           );
         }
-        
-        // Perbaikan: Kirim data default yang jelas
+        print('Prediksi: Tidak Diketahui, Confidence: \\${topPrediction.value}');
         await _sendToBackend(
           isMinangkabauBatik: false,
           batikName: 'Tidak Diketahui',
           description: 'Gambar tidak dapat diidentifikasi sebagai motif batik Minangkabau.',
-          origin: 'Tidak diketahui'
+          origin: 'Tidak diketahui',
         );
-
       } else {
         final double batikConfidence = topPrediction.value;
         final double cappedConfidence = batikConfidence > 1.0 ? 1.0 : batikConfidence;
-        final String batikOrigin = _batikInfo[topPrediction.key]?['origin'] ?? 'Tidak diketahui';
-        final String batikPhilosophy = _batikInfo[topPrediction.key]?['philosophy'] ?? 'Filosofi tidak tersedia.';
-        final bool isMinangkabauBatik = _batikInfo.containsKey(topPrediction.key);
-
-        // Kirim hasil ke backend
+        print('Prediksi: \\${batikNameForBackend}, Confidence: \\${cappedConfidence}');
+        print('Origin: \\${batikOrigin}');
+        print('Philosophy: \\${batikPhilosophy}');
         await _sendToBackend(
           isMinangkabauBatik: isMinangkabauBatik,
-          batikName: topPrediction.key,
+          batikName: batikNameForBackend,
           origin: batikOrigin,
           description: batikPhilosophy,
         );
-
-        // Langsung navigasi ke halaman hasil tanpa pop-up notifikasi
         if (mounted) {
           Navigator.push(
             context,
             MaterialPageRoute(
               builder: (_) => BatikResultPage(
                 uploadedImage: _selectedImage,
-                batikName: topPrediction.key,
+                batikName: batikNameForBackend,
                 batikConfidence: cappedConfidence,
                 batikOrigin: batikOrigin,
                 batikPhilosophy: batikPhilosophy,
@@ -294,14 +351,14 @@ class _UploadPageState extends State<UploadPage> {
       }
     } catch (e) {
       if (mounted) {
-        Navigator.of(context).pop(); // Menutup pop-up loading jika error
+        Navigator.of(context).pop();
         _showAlert(
           type: QuickAlertType.error,
           title: 'Error Prediksi',
-          text: 'Gagal memprediksi gambar: $e',
+          text: 'Gagal memprediksi gambar: \\${e}',
         );
       }
-      print('❌ Error saat prediksi: $e');
+      print('❌ Error saat prediksi: \\${e}');
     } finally {
       if (mounted) {
         setState(() {

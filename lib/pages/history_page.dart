@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'package:quickalert/quickalert.dart';
 import 'package:intl/intl.dart';
 import 'detail_page.dart';
@@ -93,9 +92,9 @@ class _HistoryPageState extends State<HistoryPage> {
     } catch (e) {
       setState(() {
         _isLoading = false;
-        _error = 'Terjadi kesalahan: ' + e.toString();
+        _error = 'Terjadi kesalahan: $e';
       });
-      print('❌ Error koneksi: ' + e.toString());
+      print('❌ Error koneksi: $e');
     }
   }
 
