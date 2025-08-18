@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:quickalert/quickalert.dart';
@@ -27,10 +28,9 @@ class _UploadPageState extends State<UploadPage> {
 
   final double _outputScale = 0.031607624143362045;
   final int _outputZeroPoint = 184;
-  final double _confidenceThreshold = 0.2;
+  final double _confidenceThreshold = 0.1; // Ambang batas dinaikkan untuk akurasi
 
   final Map<String, Map<String, String>> _batikInfo = {
-    // ... (map _batikInfo tetap sama)
     'MOTIF BATIK AKA BAJELO': {
       'origin': 'Minangkabau (Sumatera Barat)',
       'philosophy': '''Motif aka bajelo mengandung arti bahwa tanaman yang memiliki akar yang saling menjalar dan menyatu.Hal ini mencerminkan adanya keselarasan dan kerja sama antar tiga tungku sajarangan pada figur di lingkungan sosial dan masyarakat adatMinangkabau, yaitu alim ulama, cerdik pandai, dan ninik mamak.Ketiga unsur inisaling terhubung dalam satu kesatuan yang harmonis,yang menciptakan kerukunandalam nagari.''',
@@ -169,15 +169,10 @@ class _UploadPageState extends State<UploadPage> {
       return;
     }
 
-    // Sanitasi dan limitasi string
     String safeBatikName = (batikName ?? '').trim();
     String safeDescription = (description ?? '').trim();
     String safeOrigin = (origin ?? '').trim();
-    if (safeBatikName.length > 100) safeBatikName = safeBatikName.substring(0, 100);
-    if (safeDescription.length > 1000) safeDescription = safeDescription.substring(0, 1000);
-    if (safeOrigin.length > 100) safeOrigin = safeOrigin.substring(0, 100);
 
-    // Debug print semua field
     print('--- DATA YANG DIKIRIM KE BACKEND ---');
     print('isMinangkabauBatik: \\$isMinangkabauBatik');
     print('batikName: \\$safeBatikName');
@@ -204,7 +199,7 @@ class _UploadPageState extends State<UploadPage> {
       );
 
       if (mounted) {
-        Navigator.of(context).pop(); // Menutup pop-up loading setelah upload
+        Navigator.of(context).pop();
         if (response.statusCode == 201) {
           // Navigasi ke halaman hasil dilakukan di _predictImage
         } else if (response.statusCode == 401) {
@@ -225,7 +220,7 @@ class _UploadPageState extends State<UploadPage> {
       }
     } catch (e) {
       if (mounted) {
-        Navigator.of(context).pop(); // Menutup pop-up loading jika terjadi error
+        Navigator.of(context).pop();
         _showAlert(
           type: QuickAlertType.error,
           title: 'Error Koneksi',
@@ -236,27 +231,26 @@ class _UploadPageState extends State<UploadPage> {
     }
   }
 
-  // Helper: cari key paling mirip dari _batikInfo
   String? _findClosestBatikKey(String label) {
-    String normalized(String s) => s.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+    String normalized(String s) => s.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), ' ');
     String normLabel = normalized(label);
 
-    // Logika pencarian yang diperbaiki
     for (final key in _batikInfo.keys) {
       if (normalized(key) == normLabel) {
         print('✅ Ditemukan kecocokan persis: $key');
         return key;
       }
     }
-    // Fallback: cari yang mengandung kata kunci utama jika kecocokan persis gagal
-    for (final key in _batikInfo.keys) {
-      if (normalized(key).contains(normLabel) || normLabel.contains(normalized(key))) {
-        print('✅ Ditemukan kecocokan parsial: $key');
-        return key;
-      }
-    }
     print('❌ Tidak ada kecocokan yang ditemukan untuk label: $label');
     return null;
+  }
+
+  // Fungsi softmax untuk konversi logits menjadi probabilitas
+  List<double> _softmax(List<double> logits) {
+    double maxLogit = logits.reduce((a, b) => a > b ? a : b);
+    List<double> expValues = logits.map((logit) => exp(logit - maxLogit)).toList();
+    double sumExp = expValues.reduce((a, b) => a + b);
+    return expValues.map((e) => e / sumExp).toList();
   }
 
   Future<void> _predictImage() async {
@@ -281,14 +275,19 @@ class _UploadPageState extends State<UploadPage> {
       var outputShape = outputTensor.shape;
       var output = Uint8List(outputShape.reduce((a, b) => a * b)).reshape(outputShape);
       _interpreter!.run(inputData, output);
-      final List<double> probabilities = [];
+
+      final List<double> logits = [];
       for (int i = 0; i < output[0].length; i++) {
-        probabilities.add((output[0][i] - _outputZeroPoint) * _outputScale);
+        logits.add((output[0][i] - _outputZeroPoint) * _outputScale);
       }
+
+      final List<double> softmaxProbabilities = _softmax(logits);
+
       final Map<String, double> predictionMap = {};
       for (int i = 0; i < _labels.length; i++) {
-        predictionMap[_labels[i]] = probabilities[i];
+        predictionMap[_labels[i]] = softmaxProbabilities[i];
       }
+
       final sortedPredictions = predictionMap.entries.toList()
         ..sort((a, b) => b.value.compareTo(a.value));
       final topPrediction = sortedPredictions.first;
@@ -298,15 +297,23 @@ class _UploadPageState extends State<UploadPage> {
       }
 
       String predictedName = topPrediction.key.trim();
-      print('Label mentah dari model: "${topPrediction.key}"');
+      double batikConfidence = topPrediction.value;
+
+      print('Label mentah dari model: "$predictedName"');
+
+      // Ambil data dari _batikInfo jika prediksi valid
       String? matchedKey = _findClosestBatikKey(predictedName);
       final batikInfoEntry = matchedKey != null ? _batikInfo[matchedKey] : null;
-      final bool isMinangkabauBatik = batikInfoEntry != null;
-      final String batikOrigin = batikInfoEntry?['origin'] ?? 'Tidak diketahui';
-      final String batikPhilosophy = batikInfoEntry?['philosophy'] ?? 'Filosofi tidak tersedia.';
-      final String batikNameForBackend = matchedKey ?? predictedName;
 
-      if (topPrediction.value < _confidenceThreshold) {
+      if (batikConfidence < _confidenceThreshold) {
+        // Logika untuk prediksi yang tidak valid
+        print('❌ Prediksi: Tidak Diketahui, Confidence: \\$batikConfidence (di bawah ambang batas \\$_confidenceThreshold)');
+        await _sendToBackend(
+          isMinangkabauBatik: false,
+          batikName: 'Tidak Diketahui',
+          description: 'Gambar tidak dapat diidentifikasi sebagai motif batik Minangkabau.',
+          origin: 'Tidak diketahui',
+        );
         if (mounted) {
           _showAlert(
             type: QuickAlertType.warning,
@@ -315,25 +322,24 @@ class _UploadPageState extends State<UploadPage> {
             autoCloseDuration: const Duration(seconds: 3),
           );
         }
-        print('Prediksi: Tidak Diketahui, Confidence: \\${topPrediction.value}');
-        await _sendToBackend(
-          isMinangkabauBatik: false,
-          batikName: 'Tidak Diketahui',
-          description: 'Gambar tidak dapat diidentifikasi sebagai motif batik Minangkabau.',
-          origin: 'Tidak diketahui',
-        );
       } else {
-        final double batikConfidence = topPrediction.value;
-        final double cappedConfidence = batikConfidence > 1.0 ? 1.0 : batikConfidence;
-        print('Prediksi: \\${batikNameForBackend}, Confidence: \\${cappedConfidence}');
-        print('Origin: \\${batikOrigin}');
-        print('Philosophy: \\${batikPhilosophy}');
+        // Logika untuk prediksi yang valid
+        final bool isMinangkabauBatik = batikInfoEntry != null;
+        final String batikOrigin = batikInfoEntry?['origin'] ?? 'Tidak diketahui';
+        final String batikPhilosophy = batikInfoEntry?['philosophy'] ?? 'Filosofi tidak tersedia.';
+        final String batikNameForBackend = matchedKey ?? predictedName;
+
+        print('Prediksi: \\$batikNameForBackend, Confidence: \\$batikConfidence');
+        print('Origin: \\$batikOrigin');
+        print('Philosophy: \\$batikPhilosophy');
+
         await _sendToBackend(
           isMinangkabauBatik: isMinangkabauBatik,
           batikName: batikNameForBackend,
           origin: batikOrigin,
           description: batikPhilosophy,
         );
+
         if (mounted) {
           Navigator.push(
             context,
@@ -341,7 +347,7 @@ class _UploadPageState extends State<UploadPage> {
               builder: (_) => BatikResultPage(
                 uploadedImage: _selectedImage,
                 batikName: batikNameForBackend,
-                batikConfidence: cappedConfidence,
+                batikConfidence: batikConfidence,
                 batikOrigin: batikOrigin,
                 batikPhilosophy: batikPhilosophy,
               ),
@@ -355,10 +361,10 @@ class _UploadPageState extends State<UploadPage> {
         _showAlert(
           type: QuickAlertType.error,
           title: 'Error Prediksi',
-          text: 'Gagal memprediksi gambar: \\${e}',
+          text: 'Gagal memprediksi gambar: \\$e',
         );
       }
-      print('❌ Error saat prediksi: \\${e}');
+      print('❌ Error saat prediksi: \\$e');
     } finally {
       if (mounted) {
         setState(() {
@@ -368,6 +374,7 @@ class _UploadPageState extends State<UploadPage> {
     }
   }
 
+  // ... (Fungsi _pickImage, _showAlert, _deleteImage, _logout, dispose, dan build tetap sama)
   Future<void> _pickImage(ImageSource source) async {
     final picker = ImagePicker();
     final picked = await picker.pickImage(source: source);
