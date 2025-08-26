@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:batik/pages/login_page.dart';
-import 'package:batik/pages/upload_page.dart';
+import 'package:batik/main_layout.dart';
 
 void main() {
   runApp(const MyApp());
@@ -68,7 +68,8 @@ class _AuthCheckState extends State<_AuthCheck> {
         ),
       );
     } else {
-      return _isLoggedIn ? const UploadPage() : const LoginPage();
+      // Ubah navigasi setelah login berhasil ke MainLayout
+      return _isLoggedIn ? const MainLayout() : const LoginPage();
     }
   }
 }

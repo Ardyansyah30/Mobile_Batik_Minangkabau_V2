@@ -29,7 +29,7 @@ class BatikResultPage extends StatelessWidget {
             fontWeight: FontWeight.bold,
           ),
         ),
-        backgroundColor: const Color.fromRGBO(255, 255, 255, 0.8), // Warna transparan yang lebih konsisten
+        backgroundColor: const Color.fromRGBO(255, 255, 255, 0.8),
         foregroundColor: Colors.black,
         centerTitle: true,
         elevation: 0,
@@ -86,6 +86,7 @@ class BatikResultPage extends StatelessWidget {
                   const SizedBox(height: 10),
                   _buildInfoCard("Asal Daerah", batikOrigin, false),
                   const SizedBox(height: 10),
+                  // Panggilan untuk filosofi dengan isJustified: true
                   _buildInfoCard("Filosofi", batikPhilosophy, true),
                   const SizedBox(height: 30),
                   // Tombol kembali
@@ -122,7 +123,7 @@ class BatikResultPage extends StatelessWidget {
   // Metode untuk membangun kartu hasil
   Widget _buildResultCard({required Widget child}) {
     return Container(
-      height: 300, // Ukuran tetap untuk konsistensi
+      height: 300,
       width: double.infinity,
       decoration: BoxDecoration(
         color: const Color.fromRGBO(255, 255, 255, 0.5),

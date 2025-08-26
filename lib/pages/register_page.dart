@@ -4,6 +4,7 @@ import 'package:quickalert/quickalert.dart';
 import 'package:batik/pages/login_page.dart';
 import 'package:batik/pages/upload_page.dart';
 import 'package:batik/services/api_service.dart';
+import 'package:batik/main_layout.dart';
 
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});
@@ -39,20 +40,23 @@ class _RegisterPageState extends State<RegisterPage> {
         try {
           final data = json.decode(response.body);
           final token = data['access_token'];
+          final user = data['user'];
 
-          if (token != null) {
+          if (token != null && user != null && user['name'] != null) {
             await ApiService.saveToken(token);
+            await ApiService.saveUsername(user['name']);
 
             if (mounted) {
               QuickAlert.show(
-                context: context, // Perbaikan: Tambah context
+                context: context,
                 type: QuickAlertType.success,
                 title: 'Registrasi Berhasil',
                 text: 'Akun Anda berhasil dibuat!',
                 onConfirmBtnTap: () {
+                  // Ganti baris ini untuk navigasi ke MainLayout
                   Navigator.pushAndRemoveUntil(
                     context,
-                    MaterialPageRoute(builder: (_) => const UploadPage()),
+                    MaterialPageRoute(builder: (_) => const MainLayout()),
                         (Route<dynamic> route) => false,
                   );
                 },
@@ -61,7 +65,7 @@ class _RegisterPageState extends State<RegisterPage> {
           } else {
             if (mounted) {
               QuickAlert.show(
-                context: context, // Perbaikan: Tambah context
+                context: context,
                 type: QuickAlertType.error,
                 title: 'Registrasi Berhasil, Token Hilang',
                 text: 'Silakan coba login manual untuk mendapatkan token.',
@@ -77,7 +81,7 @@ class _RegisterPageState extends State<RegisterPage> {
         } on FormatException {
           if (mounted) {
             QuickAlert.show(
-              context: context, // Perbaikan: Tambah context
+              context: context,
               type: QuickAlertType.error,
               title: 'Format Respons Tidak Valid',
               text: 'Server mengembalikan respons yang tidak dapat dibaca.',
@@ -102,7 +106,7 @@ class _RegisterPageState extends State<RegisterPage> {
             errorMessage = 'Gagal membaca respons error dari server. Status: ${response.statusCode}';
           }
           QuickAlert.show(
-            context: context, // Perbaikan: Tambah context
+            context: context,
             type: QuickAlertType.error,
             title: 'Registrasi Gagal',
             text: errorMessage,
@@ -112,7 +116,7 @@ class _RegisterPageState extends State<RegisterPage> {
     } catch (e) {
       if (mounted) {
         QuickAlert.show(
-          context: context, // Perbaikan: Tambah context
+          context: context,
           type: QuickAlertType.error,
           title: 'Koneksi Gagal',
           text: 'Tidak dapat terhubung ke server. Periksa koneksi internet Anda.',
@@ -159,7 +163,7 @@ class _RegisterPageState extends State<RegisterPage> {
                       style: TextStyle(
                         fontSize: 28,
                         fontWeight: FontWeight.bold,
-                        color: Colors.white,
+                        color: Colors.black,
                       ),
                     ),
                     const SizedBox(height: 40),
@@ -257,7 +261,7 @@ class _RegisterPageState extends State<RegisterPage> {
                       child: const Text(
                         'Sudah punya akun? Login di sini',
                         style: TextStyle(
-                          color: Colors.white,
+                          color: Colors.black,
                           fontSize: 14,
                         ),
                       ),

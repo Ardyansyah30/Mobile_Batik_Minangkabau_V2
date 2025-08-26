@@ -1,3 +1,5 @@
+// lib/pages/upload_page.dart
+
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -7,10 +9,12 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:quickalert/quickalert.dart';
 import 'package:tflite_flutter/tflite_flutter.dart';
+import 'package:path_provider/path_provider.dart';
 import 'batik_result_page.dart';
 import 'history_page.dart';
 import 'package:batik/services/api_service.dart';
 import 'login_page.dart';
+import 'package:batik/batik_data.dart';
 
 class UploadPage extends StatefulWidget {
   const UploadPage({super.key});
@@ -28,55 +32,26 @@ class _UploadPageState extends State<UploadPage> {
 
   final double _outputScale = 0.031607624143362045;
   final int _outputZeroPoint = 184;
-  final double _confidenceThreshold = 0.1; // Ambang batas dinaikkan untuk akurasi
+  final double _confidenceThreshold = 0.3;
 
-  final Map<String, Map<String, String>> _batikInfo = {
-    'MOTIF BATIK AKA BAJELO': {
-      'origin': 'Minangkabau (Sumatera Barat)',
-      'philosophy': '''Motif aka bajelo mengandung arti bahwa tanaman yang memiliki akar yang saling menjalar dan menyatu.Hal ini mencerminkan adanya keselarasan dan kerja sama antar tiga tungku sajarangan pada figur di lingkungan sosial dan masyarakat adatMinangkabau, yaitu alim ulama, cerdik pandai, dan ninik mamak.Ketiga unsur inisaling terhubung dalam satu kesatuan yang harmonis,yang menciptakan kerukunandalam nagari.''',
-    },
-    'MOTIF BATIK AYAM KUKUAK BALENGGEK': {
-      'origin': 'Solok, Sumatera Barat',
-      'philosophy': '''Motif ini diciptakan oleh pemilik batik Salingka Tabek seorang entrepreneur muda generasi Milenial yaitu , Yusrizal karena terinspirasi melihat kokoh dan megahnya patung ayam yang berada di pusat Kabupaten yaitu dekat dari kantor Bupati Kabupaten Solok. Kemegahan ini mencerminkan kuatnya peran pemimpin dalam melindungi masyarakat nya.''',
-    },
-    'MOTIF BATIK BURUNG KUAUW': {
-      'origin': 'Hutan tropis Sumatera Barat',
-      'philosophy': '''Burung kuaw termasuk jenis burung langka yang hanya ada di Sumatera Barat. Burung yang memiliki bulu yang indah dan tidak kalah indah dengan burung merak.Keindahan bulu burung kuaw ini menginsiprasi pemilik rumah batik Salingka Tabek menuangkan nya dalam motif batik jenis batik tulis yang di tulis di atas secarik kain dengan bentuk yang indah. Keindahan tersebut mencerminkan filosofi bahwa keindahan akan memancarkan kebaikan, keluhuran budi dan manfaat bagi orang banyak. Keindahan akan memancarkan semangat untuk memberikan yang terbaik bagi orang banyak''',
-    },
-    'MOTIF BATIK BURUNG MAKAN PADI': {
-      'origin': 'Solok, Sumatera barat',
-      'philosophy': '''Motif burung makan padi ini mendeskripsikan burung yang menggambarkan kegembiraannya memakan padi di sawah. Buliran padi yang bernas menjadi hal yang menyenangkan bagi burung pemakan padi. Padi yang mengguning dihamparan sawah petani yang luas di deskripsikan oleh pemilik batik Salingka Tabek menjadi kekuatan hubungan antar makluk yang saling memiliki ketergantungan satu sama lain..''',
-    },
-    'MOTIF BATIK ITIAK PULANG PATANG': {
-      'origin': 'Minangkabau, Sumatera Barat',
-      'philosophy': '''Motif itiak pulang patang mendeskripsikan bahwa masyarakat Minang Kabau merupakan komunitas yang kental dengan toleransi. Ada nya toleransi yang baik ditandai dengan barisan panjang itik yang selaras dan segaris dalam mengikuti barisan yang teratur dan terpola. Hal ini juga menggambarkan bahwa dalam adat Minang Kabau pemimpin didahulukan selangkah dan ditinggikan seranting.Barisan itik juga memberikan filosofi bahwa pemimpin yang amanah akan diikuti oleh anggotanya baik dalam sikap maupun dalam perbuatan''',
-    },
-    'MOTIF BATIK MALABUIK PADI (TULIS)': {
-      'origin': 'Solok, Sumatera barat',
-      'philosophy': '''Motif batik tulis ini mendeskripsikan setelah panen padi di sawah, di lanjutkan dengan kegiatan melambuik padi (Bahasa Indonesia: memukul padi ke suatu objek untuk merontokkan padi dari tangkai/ batang padi) atau memisahkan padi dari tangkai/ batangnya dengan cara memukulkannya pada ke sebuah wadah (objek) . Kegiatan ini mengedepankan nilai-nilai gotong-royong dalam hubungan masyarakat yang sama-sama memiliki Lokasi persawahan yang berdekatan. Budaya malambuik padi memiliki local wisdom yang unik dan lestari sampai saat ini khususnya masyarakat yang berada di kabupaten di provinsi Sumatera Barat.Kekuatan dari kearifan lokal ini lah yang diusung oleh pemilik sekaligus pencipta motif.''',
-    },
-    'MOTIF BATIK RANCAK KABUPATEN SOLOK': {
-      'origin': 'Solok, Sumatera barat',
-      'philosophy': '''Keindahan alam di kabupaten Solok menginsprasi pemilik batik Salingka Tabek mendeskripsikannya dalam sentuhan tangan yang indah di atas kain polos yang berkualitas .Keindahan alam di kabupaten Solok memberikan rasa syukur dan dimanifestasikan dalam motif batik yang menggambarkan keindahan kabupaten Solok dengan kehadiran gunung Talang, Danau Di Atas dan Danau di Bawah ,Danau Singkarak serta keindahan alam lainnya yang dimiliki oleh Kabupaten Solok.''',
-    },
-    'MOTIF BATIK RUMAH GADANG URANG KOTO BARU': {
-      'origin': 'Solok Selatan, Sumatera Barat',
-      'philosophy': '''Motif batik ini menggambarkan kekhasan rumah gadang bagonjong yang dimiliki oleh nagari Koto Tuo yang dikenal dengan Nagari Seribu Rumah Gadang yang berada di Kabupaten Solok Selatan ,yaitu bertetanggaan dengan Kabupaten Solok. Nagari ini memiliki rumah gadang bagonjong yang relatif banyak jumlahnya dibanding dengan daerah/ kabupaten lain. Sehingga motif ini menjadi inspirasi baru bagi pemilik sekaligus pencipta motif ini yaitu Yusrizal.''',
-    },
-    'MOTIF BATIK RUMAH GADANG USANG': {
-      'origin': 'Solok,Sumatera Barat',
-      'philosophy': '''Motif rumah gadang usang ini mencerminkan bahwa dalam kehidupan ini akan selalu ada regenerasi. Kehadiran rumah gadang usang menjadi sejarah yang menggambarkan prototype , kehidupan dari generasi sebelumnya. Dimana menggambarkan kehidupan generasi sebelumnya yang sangat bersahaja dan ramah dengan alam sekitarnya. Rumah gadang using juga menggambarkan sebuah bukti bahwa kehidupan pernah ada di rumah tersebut yang sudah berlangsung lama dari satu generasi ke generasi berikutnya. Karena itu rumah gadang usingperlu tetap di jaga dengan tetap melestarikannya menjadi asset yang bernilai filosofi tinggi.'''
-    },
-    'MOTIF BATIK RUMAH GADANG': {
-      'origin': 'Sumatera Barat',
-      'philosophy': '''Motif Rumah Gadang melambangkan kebersamaan, kekerabatan, dan nilai musyawarah dalam adat Minangkabau. Rumah Gadang tidak hanya sebagai tempat tinggal, tapi juga pusat kehidupan sosial dan adat. Dalam batik, motif ini mencerminkan jati diri, struktur matrilineial, dan penghormatan terhadap leluhur dan nilai tradisional. Setiap lekukan dan susunan motifnya menggambarkan kerukunan antar keluarga besar yang tinggal dalam satu rumah gadang serta tingginya kedudukan perempuan dalam struktur adat Minang.'''
-    }
-  };
+  late String _appDocumentPath;
 
   @override
   void initState() {
     super.initState();
     _loadModelAndLabels();
+    _initAppDocumentPath();
+  }
+
+  @override
+  void dispose() {
+    _interpreter?.close();
+    super.dispose();
+  }
+
+  Future<void> _initAppDocumentPath() async {
+    final directory = await getApplicationDocumentsDirectory();
+    _appDocumentPath = directory.path;
   }
 
   Future<void> _loadModelAndLabels() async {
@@ -142,6 +117,25 @@ class _UploadPageState extends State<UploadPage> {
       }
     }
     return input;
+  }
+
+  Future<void> _savePredictedImage(String batikName) async {
+    if (_selectedImage == null) return;
+    final cleanedName = batikName.replaceAll(RegExp(r'[^a-zA-Z0-9\s]'), '');
+    final directoryPath = '$_appDocumentPath/batik_predicted_images/$cleanedName';
+    final Directory dir = Directory(directoryPath);
+    if (!await dir.exists()) {
+      await dir.create(recursive: true);
+      print('✅ Folder baru berhasil dibuat: $directoryPath');
+    }
+    final fileName = '${DateTime.now().millisecondsSinceEpoch}_${_selectedImage!.path.split('/').last}';
+    final destinationPath = '$directoryPath/$fileName';
+    try {
+      await _selectedImage!.copy(destinationPath);
+      print('✅ Gambar berhasil disalin ke: $destinationPath');
+    } catch (e) {
+      print('❌ Gagal menyalin gambar: $e');
+    }
   }
 
   Future<void> _sendToBackend({
@@ -235,7 +229,7 @@ class _UploadPageState extends State<UploadPage> {
     String normalized(String s) => s.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), ' ');
     String normLabel = normalized(label);
 
-    for (final key in _batikInfo.keys) {
+    for (final key in batikInfo.keys) {
       if (normalized(key) == normLabel) {
         print('✅ Ditemukan kecocokan persis: $key');
         return key;
@@ -245,7 +239,6 @@ class _UploadPageState extends State<UploadPage> {
     return null;
   }
 
-  // Fungsi softmax untuk konversi logits menjadi probabilitas
   List<double> _softmax(List<double> logits) {
     double maxLogit = logits.reduce((a, b) => a > b ? a : b);
     List<double> expValues = logits.map((logit) => exp(logit - maxLogit)).toList();
@@ -301,12 +294,10 @@ class _UploadPageState extends State<UploadPage> {
 
       print('Label mentah dari model: "$predictedName"');
 
-      // Ambil data dari _batikInfo jika prediksi valid
       String? matchedKey = _findClosestBatikKey(predictedName);
-      final batikInfoEntry = matchedKey != null ? _batikInfo[matchedKey] : null;
+      final batikInfoEntry = matchedKey != null ? batikInfo[matchedKey] : null;
 
       if (batikConfidence < _confidenceThreshold) {
-        // Logika untuk prediksi yang tidak valid
         print('❌ Prediksi: Tidak Diketahui, Confidence: \\$batikConfidence (di bawah ambang batas \\$_confidenceThreshold)');
         await _sendToBackend(
           isMinangkabauBatik: false,
@@ -323,7 +314,6 @@ class _UploadPageState extends State<UploadPage> {
           );
         }
       } else {
-        // Logika untuk prediksi yang valid
         final bool isMinangkabauBatik = batikInfoEntry != null;
         final String batikOrigin = batikInfoEntry?['origin'] ?? 'Tidak diketahui';
         final String batikPhilosophy = batikInfoEntry?['philosophy'] ?? 'Filosofi tidak tersedia.';
@@ -374,7 +364,6 @@ class _UploadPageState extends State<UploadPage> {
     }
   }
 
-  // ... (Fungsi _pickImage, _showAlert, _deleteImage, _logout, dispose, dan build tetap sama)
   Future<void> _pickImage(ImageSource source) async {
     final picker = ImagePicker();
     final picked = await picker.pickImage(source: source);
@@ -429,23 +418,6 @@ class _UploadPageState extends State<UploadPage> {
     }
   }
 
-  Future<void> _logout() async {
-    await ApiService.removeToken();
-    if (mounted) {
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (context) => const LoginPage()),
-            (Route<dynamic> route) => false,
-      );
-    }
-  }
-
-  @override
-  void dispose() {
-    _interpreter?.close();
-    super.dispose();
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -458,21 +430,6 @@ class _UploadPageState extends State<UploadPage> {
           ),
         ),
         backgroundColor: const Color(0xFF8B4513),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.history, color: Colors.white),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const HistoryPage()),
-              );
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.logout, color: Colors.white),
-            onPressed: _logout,
-          ),
-        ],
       ),
       body: _isLoading
           ? const Center(

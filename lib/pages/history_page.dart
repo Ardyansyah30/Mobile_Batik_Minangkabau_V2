@@ -1,9 +1,13 @@
+// lib/pages/history_page.dart
+
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:quickalert/quickalert.dart';
 import 'package:intl/intl.dart';
 import 'detail_page.dart';
 import '../services/api_service.dart';
+
+// ... (kode kelas Batik yang sudah ada)
 
 class Batik {
   final int id;
@@ -94,7 +98,6 @@ class _HistoryPageState extends State<HistoryPage> {
     }
   }
 
-  // Fungsi untuk menampilkan dialog konfirmasi dan memicu penghapusan semua riwayat
   Future<void> _deleteAllHistory() async {
     if (!mounted) return;
     QuickAlert.show(
@@ -107,7 +110,7 @@ class _HistoryPageState extends State<HistoryPage> {
       confirmBtnColor: Colors.red,
       onConfirmBtnTap: () async {
         if (!mounted) return;
-        Navigator.pop(context); // Tutup dialog konfirmasi
+        Navigator.pop(context);
         QuickAlert.show(
           context: context,
           type: QuickAlertType.loading,
@@ -118,14 +121,14 @@ class _HistoryPageState extends State<HistoryPage> {
         try {
           final response = await ApiService.deleteAllBatiks();
           if (mounted) {
-            Navigator.of(context).pop(); // Tutup loading alert
+            Navigator.of(context).pop();
             if (response.statusCode == 200) {
               _showAlert(
                 type: QuickAlertType.success,
                 title: 'Sukses',
                 text: 'Semua riwayat berhasil dihapus.',
               );
-              _fetchMyBatiks(); // Muat ulang data
+              _fetchMyBatiks();
             } else {
               final body = json.decode(response.body);
               _showAlert(
@@ -174,44 +177,45 @@ class _HistoryPageState extends State<HistoryPage> {
   Future<void> _deleteBatik(int id, int index) async {
     if (!mounted) return;
     QuickAlert.show(
-      context: context,
-      type: QuickAlertType.confirm,
-      title: 'Konfirmasi',
-      text: 'Apakah Anda yakin ingin menghapus riwayat ini?',
-      confirmBtnText: 'Ya',
-      cancelBtnText: 'Tidak',
-      confirmBtnColor: Colors.red,
-      onConfirmBtnTap: () async {
-        if (!mounted) return;
-        Navigator.pop(context); // Tutup dialog konfirmasi
-        final response = await ApiService.deleteBatik(id);
+        context: context,
+        type: QuickAlertType.confirm,
+        title: 'Konfirmasi',
+        text: 'Apakah Anda yakin ingin menghapus riwayat ini?',
+        confirmBtnText: 'Ya',
+        cancelBtnText: 'Tidak',
+        confirmBtnColor: Colors.red,
+        onConfirmBtnTap: () async {
+          if (!mounted) return;
+          Navigator.pop(context);
+          final response = await ApiService.deleteBatik(id);
 
-        if (mounted) {
-          if (response.statusCode == 200) {
-            _showAlert(
-              type: QuickAlertType.success,
-              title: 'Berhasil',
-              text: 'Riwayat berhasil dihapus.',
-            );
-            setState(() {
-              _batiks.removeAt(index);
-            });
-          } else {
-            final responseBody = json.decode(response.body);
-            _showAlert(
-              type: QuickAlertType.error,
-              title: 'Gagal',
-              text: 'Gagal menghapus riwayat: ${responseBody['message']}',
-            );
+          if (mounted) {
+            if (response.statusCode == 200) {
+              _showAlert(
+                type: QuickAlertType.success,
+                title: 'Berhasil',
+                text: 'Riwayat berhasil dihapus.',
+              );
+              setState(() {
+                _batiks.removeAt(index);
+              });
+            } else {
+              final responseBody = json.decode(response.body);
+              _showAlert(
+                type: QuickAlertType.error,
+                title: 'Gagal',
+                text: 'Gagal menghapus riwayat: ${responseBody['message']}',
+              );
+            }
           }
         }
-      },
     );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      // Tambahkan AppBar di sini
       appBar: AppBar(
         title: const Text(
           'Riwayat Deteksi',
@@ -223,7 +227,7 @@ class _HistoryPageState extends State<HistoryPage> {
         backgroundColor: const Color(0xFF8B4513),
         iconTheme: const IconThemeData(color: Colors.white),
         actions: [
-          if (_batiks.isNotEmpty) // Tampilkan tombol hanya jika ada riwayat
+          if (_batiks.isNotEmpty)
             IconButton(
               icon: const Icon(Icons.delete_sweep, color: Colors.white),
               onPressed: _deleteAllHistory,
@@ -237,15 +241,6 @@ class _HistoryPageState extends State<HistoryPage> {
             child: Image.asset(
               'assets/background1.png',
               fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => Container(
-                color: Colors.grey,
-                child: const Center(
-                  child: Text(
-                    'Background image not found',
-                    style: TextStyle(color: Colors.white),
-                  ),
-                ),
-              ),
             ),
           ),
           _buildBody(),
@@ -272,14 +267,32 @@ class _HistoryPageState extends State<HistoryPage> {
       );
     }
 
+    // Ubah bagian ini untuk menghilangkan logo dan teks
     if (_batiks.isEmpty) {
-      return const Center(
+      return Center(
         child: Padding(
-          padding: EdgeInsets.all(16.0),
-          child: Text(
-            'Anda belum memiliki riwayat deteksi. Unggah gambar untuk memulai!',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 16, color: Colors.black54),
+          padding: const EdgeInsets.all(32.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: const [
+              Icon(
+                Icons.history,
+                size: 100,
+                color: Colors.black54,
+              ),
+              SizedBox(height: 20),
+              Text(
+                'Anda belum memiliki riwayat deteksi.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 16, color: Colors.black54),
+              ),
+              SizedBox(height: 10),
+              Text(
+                'Unggah gambar untuk memulai!',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 16, color: Colors.black54),
+              ),
+            ],
           ),
         ),
       );
