@@ -1,14 +1,38 @@
-// lib/services/api_service.dart
-
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter/foundation.dart';
+
+@immutable
+class BatikModel {
+  final String name;
+  final String origin;
+  final String philosophy;
+  final String? imageUrl;
+
+  const BatikModel({
+    required this.name,
+    required this.origin,
+    required this.philosophy,
+    this.imageUrl,
+  });
+
+  factory BatikModel.fromJson(Map<String, dynamic> json) {
+    return BatikModel(
+      name: json['batik_name'] as String,
+      origin: json['origin'] as String,
+      philosophy: json['description'] as String,
+      imageUrl: json['image_url'] as String?,
+    );
+  }
+}
 
 class ApiService {
-  static const String baseUrl = 'http://10.0.2.2:8000';
+  static const String baseUrl = 'http://10.0.2.2:8000'; ////http://10.0.2.2:8000 ///////http://192.168.1.5:8000
   static const String apiUrl = '$baseUrl/api';
 
+  // --- Fungsi Otentikasi & Penyimpanan Token ---
   static Future<String?> getToken() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString('access_token');
@@ -97,10 +121,10 @@ class ApiService {
     }
   }
 
+  // --- Fungsi Interaksi Batik ---
   static Future<List<dynamic>> getMyBatiks() async {
     final token = await getToken();
     if (token == null) {
-      // Jika token tidak ada, langsung lempar exception.
       throw Exception('Unauthenticated.');
     }
 
@@ -117,10 +141,48 @@ class ApiService {
       final body = json.decode(response.body);
       return body['batiks'] as List<dynamic>? ?? [];
     } else if (response.statusCode == 401) {
-      // Jika server mengembalikan 401, lempar exception.
       throw Exception('Unauthenticated.');
     } else {
       throw Exception('Gagal memuat data riwayat batik: ${response.statusCode}');
+    }
+  }
+
+  static Future<List<BatikModel>> getBatikInfo() async {
+    try {
+      final response = await http.get(Uri.parse('$apiUrl/batiks'));
+
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> responseData = json.decode(response.body);
+        final List<dynamic> batikData = responseData['batiks'] as List<dynamic>;
+        return batikData.map((json) {
+          return BatikModel.fromJson(json as Map<String, dynamic>);
+        }).toList();
+      } else {
+        debugPrint('Failed to load batik info. Status code: ${response.statusCode}');
+        return [];
+      }
+    } catch (e) {
+      debugPrint('Error fetching batik info: $e');
+      return [];
+    }
+  }
+
+  static Future<BatikModel?> getBatikByName(String name) async {
+    try {
+      final response = await http.get(Uri.parse('$apiUrl/batiks?batik_name=$name'));
+
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> responseData = json.decode(response.body);
+        final List<dynamic> batikData = responseData['batiks'] as List<dynamic>;
+        if (batikData.isNotEmpty) {
+          return BatikModel.fromJson(batikData.first as Map<String, dynamic>);
+        }
+        return null;
+      }
+      return null;
+    } catch (e) {
+      debugPrint('Error fetching batik by name: $e');
+      return null;
     }
   }
 
@@ -133,7 +195,6 @@ class ApiService {
   }) async {
     final token = await getToken();
     if (token == null) {
-      // Jika token tidak ada, lempar exception.
       throw Exception('Unauthenticated.');
     }
 
@@ -162,7 +223,6 @@ class ApiService {
     final streamedResponse = await request.send();
     final response = await http.Response.fromStream(streamedResponse);
     if (response.statusCode == 401) {
-      // Jika server mengembalikan 401, lempar exception.
       throw Exception('Unauthenticated.');
     }
     return response;
@@ -171,7 +231,6 @@ class ApiService {
   static Future<http.Response> deleteBatik(int batikId) async {
     final token = await getToken();
     if (token == null) {
-      // Jika token tidak ada, lempar exception.
       throw Exception('Unauthenticated.');
     }
 
@@ -185,7 +244,6 @@ class ApiService {
     );
 
     if (response.statusCode == 401) {
-      // Jika server mengembalikan 401, lempar exception.
       throw Exception('Unauthenticated.');
     }
     return response;
@@ -194,7 +252,6 @@ class ApiService {
   static Future<http.Response> deleteAllBatiks() async {
     final token = await getToken();
     if (token == null) {
-      // Jika token tidak ada, lempar exception.
       throw Exception('Unauthenticated.');
     }
 
@@ -208,7 +265,6 @@ class ApiService {
     );
 
     if (response.statusCode == 401) {
-      // Jika server mengembalikan 401, lempar exception.
       throw Exception('Unauthenticated.');
     }
     return response;

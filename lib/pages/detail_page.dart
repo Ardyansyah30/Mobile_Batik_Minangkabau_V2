@@ -1,24 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'history_page.dart'; // Import model Batik dari HistoryPage
+import 'history_page.dart';
 
 class DetailPage extends StatelessWidget {
   final Batik batik;
-  // Menghapus backendApiUrl karena tidak lagi diperlukan
-  // final String backendApiUrl;
-
   const DetailPage({
     super.key,
     required this.batik,
-    // Menghapus parameter backendApiUrl dari konstruktor
-    // required this.backendApiUrl,
   });
 
   @override
   Widget build(BuildContext context) {
     final formattedDate = DateFormat('dd MMMM yyyy').format(batik.createdAt);
-    
-    // Gunakan langsung batik.imageUrl yang sudah disesuaikan
     final imageUrl = batik.imageUrl;
 
     return Scaffold(

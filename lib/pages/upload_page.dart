@@ -1,4 +1,4 @@
-// lib/pages/upload_page.dart
+// lib/upload_page.dart
 
 import 'dart:convert';
 import 'dart:io';
@@ -14,7 +14,6 @@ import 'batik_result_page.dart';
 import 'history_page.dart';
 import 'package:batik/services/api_service.dart';
 import 'login_page.dart';
-import 'package:batik/batik_data.dart';
 
 class UploadPage extends StatefulWidget {
   const UploadPage({super.key});
@@ -36,10 +35,12 @@ class _UploadPageState extends State<UploadPage> {
 
   late String _appDocumentPath;
 
+  List<BatikModel> _allBatikInfo = [];
+
   @override
   void initState() {
     super.initState();
-    _loadModelAndLabels();
+    _loadInitialData();
     _initAppDocumentPath();
   }
 
@@ -54,22 +55,20 @@ class _UploadPageState extends State<UploadPage> {
     _appDocumentPath = directory.path;
   }
 
-  Future<void> _loadModelAndLabels() async {
+  Future<void> _loadInitialData() async {
     setState(() {
       _isLoading = true;
     });
     try {
-      _interpreter = await Interpreter.fromAsset('assets/my_model_quantized_uint8.tflite');
-      String labelsData = await DefaultAssetBundle.of(context).loadString('assets/labels.txt');
-      _labels = labelsData.split('\n').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
-      print("✅ Model dan label berhasil dimuat.");
+      await _loadModelAndLabels();
+      await _loadBatikInfo();
     } catch (e) {
-      print("❌ Gagal memuat model atau label: $e");
+      print("❌ Gagal memuat data awal: $e");
       if (mounted) {
         _showAlert(
           type: QuickAlertType.error,
           title: 'Error Inisialisasi',
-          text: 'Gagal memuat model atau label. Aplikasi mungkin tidak berfungsi dengan benar.',
+          text: 'Gagal memuat data atau model awal. Aplikasi mungkin tidak berfungsi dengan benar.',
         );
       }
     } finally {
@@ -78,6 +77,28 @@ class _UploadPageState extends State<UploadPage> {
           _isLoading = false;
         });
       }
+    }
+  }
+
+  Future<void> _loadModelAndLabels() async {
+    try {
+      _interpreter = await Interpreter.fromAsset('assets/my_model_quantized_uint8.tflite');
+      String labelsData = await DefaultAssetBundle.of(context).loadString('assets/labels.txt');
+      _labels = labelsData.split('\n').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+      print("✅ Model dan label berhasil dimuat.");
+    } catch (e) {
+      print("❌ Gagal memuat model atau label: $e");
+      rethrow;
+    }
+  }
+
+  Future<void> _loadBatikInfo() async {
+    try {
+      _allBatikInfo = await ApiService.getBatikInfo();
+      print("✅ Data batik dari backend berhasil dimuat (${_allBatikInfo.length} entri).");
+    } catch (e) {
+      print("❌ Gagal memuat data batik dari backend: $e");
+      rethrow;
     }
   }
 
@@ -154,7 +175,7 @@ class _UploadPageState extends State<UploadPage> {
       return;
     }
     if (!await _selectedImage!.exists()) {
-      print('❌ File gambar tidak ditemukan: \\${_selectedImage!.path}');
+      print('❌ File gambar tidak ditemukan: ${_selectedImage!.path}');
       _showAlert(
         type: QuickAlertType.error,
         title: 'File Tidak Ditemukan',
@@ -168,12 +189,12 @@ class _UploadPageState extends State<UploadPage> {
     String safeOrigin = (origin ?? '').trim();
 
     print('--- DATA YANG DIKIRIM KE BACKEND ---');
-    print('isMinangkabauBatik: \\$isMinangkabauBatik');
-    print('batikName: \\$safeBatikName');
-    print('description: \\$safeDescription');
-    print('origin: \\$safeOrigin');
-    print('file path: \\${_selectedImage!.path}');
-    print('file size: \\${await _selectedImage!.length()} bytes');
+    print('isMinangkabauBatik: $isMinangkabauBatik');
+    print('batikName: $safeBatikName');
+    print('description: $safeDescription');
+    print('origin: $safeOrigin');
+    print('file path: ${_selectedImage!.path}');
+    print('file size: ${await _selectedImage!.length()} bytes');
     print('-------------------------------------');
 
     _showAlert(
@@ -207,9 +228,9 @@ class _UploadPageState extends State<UploadPage> {
           _showAlert(
             type: QuickAlertType.error,
             title: 'Error Unggah',
-            text: 'Gagal mengunggah gambar. Status: \\${response.statusCode}. Respon: \\${responseBody['message']}',
+            text: 'Gagal mengunggah gambar. Status: ${response.statusCode}. Respon: ${responseBody['message']}',
           );
-          print('❌ Error mengunggah: \\${response.statusCode}, Body: \\${response.body}');
+          print('❌ Error mengunggah: ${response.statusCode}, Body: ${response.body}');
         }
       }
     } catch (e) {
@@ -218,26 +239,32 @@ class _UploadPageState extends State<UploadPage> {
         _showAlert(
           type: QuickAlertType.error,
           title: 'Error Koneksi',
-          text: 'Gagal terhubung ke server: \\$e',
+          text: 'Gagal terhubung ke server: $e',
         );
       }
-      print('❌ Error koneksi: \\$e');
+      print('❌ Error koneksi: $e');
     }
   }
 
-  String? _findClosestBatikKey(String label) {
-    String normalized(String s) => s.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), ' ');
+  // --- Bagian yang Diperbaiki ---
+  BatikModel? _findClosestBatikEntry(String label) {
+    String normalized(String s) {
+      // Mengubah ke huruf kecil, menghapus karakter non-alphanumeric (kecuali spasi),
+      // mengganti spasi ganda dengan satu spasi, dan menghapus spasi di awal/akhir
+      return s.toLowerCase().trim().replaceAll(RegExp(r'\s+'), ' ').replaceAll(RegExp(r'[^a-z0-9\s]'), '');
+    }
     String normLabel = normalized(label);
 
-    for (final key in batikInfo.keys) {
-      if (normalized(key) == normLabel) {
-        print('✅ Ditemukan kecocokan persis: $key');
-        return key;
+    for (final batik in _allBatikInfo) {
+      if (normalized(batik.name) == normLabel) {
+        print('✅ Ditemukan kecocokan persis (dari backend): ${batik.name}');
+        return batik;
       }
     }
-    print('❌ Tidak ada kecocokan yang ditemukan untuk label: $label');
+    print('❌ Tidak ada kecocokan yang ditemukan untuk label: $label dalam data backend.');
     return null;
   }
+  // --- Akhir Bagian yang Diperbaiki ---
 
   List<double> _softmax(List<double> logits) {
     double maxLogit = logits.reduce((a, b) => a > b ? a : b);
@@ -294,34 +321,33 @@ class _UploadPageState extends State<UploadPage> {
 
       print('Label mentah dari model: "$predictedName"');
 
-      String? matchedKey = _findClosestBatikKey(predictedName);
-      final batikInfoEntry = matchedKey != null ? batikInfo[matchedKey] : null;
+      final BatikModel? matchedBatik = _findClosestBatikEntry(predictedName);
 
-      if (batikConfidence < _confidenceThreshold) {
-        print('❌ Prediksi: Tidak Diketahui, Confidence: \\$batikConfidence (di bawah ambang batas \\$_confidenceThreshold)');
+      if (batikConfidence < _confidenceThreshold || matchedBatik == null) {
+        print('❌ Prediksi: Tidak Diketahui, Confidence: $batikConfidence (di bawah ambang batas $_confidenceThreshold)');
         await _sendToBackend(
           isMinangkabauBatik: false,
           batikName: 'Tidak Diketahui',
-          description: 'Gambar tidak dapat diidentifikasi sebagai motif batik Minangkabau.',
+          description: 'Gambar tidak dapat diidentifikasi sebagai motif batik Minangkabau atau tidak ditemukan di database.',
           origin: 'Tidak diketahui',
         );
         if (mounted) {
           _showAlert(
             type: QuickAlertType.warning,
             title: 'Batik Tidak Dikenali',
-            text: 'Kami tidak dapat mengidentifikasi motif batik. Mohon coba gambar lain.',
+            text: 'Kami tidak dapat mengidentifikasi motif batik atau tidak ditemukan di database. Mohon coba gambar lain.',
             autoCloseDuration: const Duration(seconds: 3),
           );
         }
       } else {
-        final bool isMinangkabauBatik = batikInfoEntry != null;
-        final String batikOrigin = batikInfoEntry?['origin'] ?? 'Tidak diketahui';
-        final String batikPhilosophy = batikInfoEntry?['philosophy'] ?? 'Filosofi tidak tersedia.';
-        final String batikNameForBackend = matchedKey ?? predictedName;
+        final bool isMinangkabauBatik = true;
+        final String batikOrigin = matchedBatik.origin;
+        final String batikPhilosophy = matchedBatik.philosophy;
+        final String batikNameForBackend = matchedBatik.name;
 
-        print('Prediksi: \\$batikNameForBackend, Confidence: \\$batikConfidence');
-        print('Origin: \\$batikOrigin');
-        print('Philosophy: \\$batikPhilosophy');
+        print('Prediksi: $batikNameForBackend, Confidence: $batikConfidence');
+        print('Origin: $batikOrigin');
+        print('Philosophy: $batikPhilosophy');
 
         await _sendToBackend(
           isMinangkabauBatik: isMinangkabauBatik,
@@ -351,10 +377,10 @@ class _UploadPageState extends State<UploadPage> {
         _showAlert(
           type: QuickAlertType.error,
           title: 'Error Prediksi',
-          text: 'Gagal memprediksi gambar: \\$e',
+          text: 'Gagal memprediksi gambar: $e',
         );
       }
-      print('❌ Error saat prediksi: \\$e');
+      print('❌ Error saat prediksi: $e');
     } finally {
       if (mounted) {
         setState(() {
@@ -540,7 +566,7 @@ class _UploadPageState extends State<UploadPage> {
                 ),
                 const SizedBox(height: 20),
                 ElevatedButton(
-                  onPressed: (_selectedImage != null && _interpreter != null && _labels.isNotEmpty)
+                  onPressed: (_selectedImage != null && _interpreter != null && _labels.isNotEmpty && !_isLoading)
                       ? _predictImage
                       : null,
                   style: ElevatedButton.styleFrom(

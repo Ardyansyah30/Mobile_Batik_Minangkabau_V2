@@ -28,19 +28,20 @@ class MyApp extends StatelessWidget {
           ),
         ),
       ),
-      home: const _AuthCheck(),
+      // Home akan menentukan rute awal berdasarkan status login.
+      home: const AuthWrapper(),
     );
   }
 }
 
-class _AuthCheck extends StatefulWidget {
-  const _AuthCheck();
+class AuthWrapper extends StatefulWidget {
+  const AuthWrapper({super.key});
 
   @override
-  State<_AuthCheck> createState() => _AuthCheckState();
+  State<AuthWrapper> createState() => _AuthWrapperState();
 }
 
-class _AuthCheckState extends State<_AuthCheck> {
+class _AuthWrapperState extends State<AuthWrapper> {
   bool _isLoggedIn = false;
   bool _isLoading = true;
 
@@ -51,8 +52,12 @@ class _AuthCheckState extends State<_AuthCheck> {
   }
 
   Future<void> _checkLoginStatus() async {
+    // Ambil instance SharedPreferences
     final prefs = await SharedPreferences.getInstance();
+    // Ambil token dari SharedPreferences
     final token = prefs.getString('access_token');
+
+    // Perbarui state berdasarkan keberadaan token
     setState(() {
       _isLoggedIn = token != null;
       _isLoading = false;
@@ -61,14 +66,16 @@ class _AuthCheckState extends State<_AuthCheck> {
 
   @override
   Widget build(BuildContext context) {
+    // Tampilkan loading indicator saat memeriksa status login
     if (_isLoading) {
       return const Scaffold(
         body: Center(
           child: CircularProgressIndicator(color: Color(0xFF8B4513)),
         ),
       );
-    } else {
-      // Ubah navigasi setelah login berhasil ke MainLayout
+    }
+    // Tampilkan halaman yang sesuai
+    else {
       return _isLoggedIn ? const MainLayout() : const LoginPage();
     }
   }
